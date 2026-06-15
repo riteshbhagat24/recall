@@ -19,8 +19,10 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     healthCheckPath: /health
-    # migrate + build search indexes + seed demo data, once per deploy
-    preDeployCommand: "npm run prod:release"
+    # Free tier has no preDeployCommand, so run migrate + search indexes + seed
+    # as part of startup (all idempotent), then launch the API. Only the web
+    # service does this; the worker just starts.
+    dockerCommand: sh -c "npm run prod:release && node dist/src/api/server.js"
     envVars:
       - key: DATABASE_URL
         fromDatabase: { name: recall-db, property: connectionString }

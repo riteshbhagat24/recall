@@ -31,8 +31,12 @@ async function main() {
   });
 
   // Heartbeat tick (REQ-16.1). Independent of job flow so /health detects a
-  // wedged worker even when the queue is idle.
-  await beat();
+  // wedged worker even when the queue is idle. Tolerate the first tick failing
+  // (e.g. worker booted before the web service ran migrations) — the interval
+  // retries, and the worker stays up instead of crash-looping.
+  await beat().catch((err) =>
+    logger.warn({ err }, 'initial heartbeat failed (DB may not be migrated yet); will retry'),
+  );
   const hb = setInterval(() => {
     beat().catch((err) => logger.error({ err }, 'heartbeat write failed'));
   }, 30_000);
