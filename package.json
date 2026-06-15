@@ -1,0 +1,50 @@
+{
+  "name": "recall",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Futuready Meeting Intelligence & Knowledge Base (Recall) — multilingual transcription → structured knowledge → governed team memory",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev:api": "tsx watch src/api/server.ts",
+    "dev:worker": "tsx watch src/worker/main.ts",
+    "start:api": "node dist/src/api/server.js",
+    "start:worker": "node dist/src/worker/main.js",
+    "prod:release": "prisma migrate deploy && node dist/scripts/applyExtras.js && node dist/prisma/seed.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:extras": "tsx scripts/applyExtras.ts",
+    "db:setup": "prisma migrate deploy && tsx scripts/applyExtras.ts && tsx prisma/seed.ts",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:reset": "prisma migrate reset --force",
+    "benchmark": "tsx scripts/benchmark.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.0",
+    "@fastify/cors": "^11.0.0",
+    "@fastify/multipart": "^9.0.3",
+    "@prisma/client": "^6.2.1",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1",
+    "openai": "^4.77.0",
+    "pg": "^8.13.1",
+    "pg-boss": "^10.1.6",
+    "pino": "^9.6.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "prisma": "^6.2.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.env.*
+storage
+.git
+.gitignore
+/tmp
+*.log
+benchmark/audio

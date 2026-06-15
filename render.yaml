@@ -1,0 +1,57 @@
+# Render blueprint — one git push gives a public URL for internal review.
+# Spins up: managed Postgres (with pgvector), the always-on API (web), and the
+# always-on pipeline worker. This matches the PRD's Path A (app + worker + DB),
+# which serverless platforms like Vercel cannot host (long-running worker/queue).
+#
+# Deploy: push this repo to GitHub → Render → "New +" → "Blueprint" → pick the
+# repo. Render reads this file. Set BASIC_AUTH (and any API keys) when prompted.
+
+databases:
+  - name: recall-db
+    plan: free                 # 30-day free Postgres; upgrade for anything lasting
+    postgresMajorVersion: "16"
+
+services:
+  # ── API + dashboard (web service, gets the public URL) ───────────────────
+  - type: web
+    name: recall-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    # migrate + build search indexes + seed demo data, once per deploy
+    preDeployCommand: "npm run prod:release"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: recall-db, property: connectionString }
+      - key: BASIC_AUTH        # shared team password gate — REQUIRED for a public link
+        sync: false            # set the value in the Render dashboard, not in git
+      - key: TRANSCRIPTION_ENGINE
+        value: mock            # demo runs with no vendor keys; flip to sarvam/openai later
+      - key: EMBEDDING_PROVIDER
+        value: mock
+      - key: APP_ENV
+        value: production
+      - key: DEV_AUTH_TRUST_HEADER
+        value: "true"          # role switcher (still header-based; real login = Phase 2)
+      # Optional — set in dashboard to enable real transcription/structuring:
+      # - key: ANTHROPIC_API_KEY  { sync: false }
+      # - key: SARVAM_API_KEY     { sync: false }
+      # - key: OPENAI_API_KEY     { sync: false }
+
+  # ── Pipeline worker (same image, worker command) ─────────────────────────
+  - type: worker
+    name: recall-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerCommand: node dist/src/worker/main.js
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: recall-db, property: connectionString }
+      - key: TRANSCRIPTION_ENGINE
+        value: mock
+      - key: EMBEDDING_PROVIDER
+        value: mock
+      - key: APP_ENV
+        value: production

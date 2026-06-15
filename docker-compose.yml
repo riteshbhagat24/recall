@@ -1,0 +1,25 @@
+# Local infra for Recall MVP.
+# Single Postgres (with pgvector) serves BOTH relational data and embeddings,
+# per the chosen MVP path. pg-boss also rides on this same Postgres, so there
+# is no Redis to operate. On the real VPS this maps 1:1.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: recall-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: recall
+      POSTGRES_PASSWORD: recall
+      POSTGRES_DB: recall
+    ports:
+      - "5433:5432" # host 5433 to avoid clashing with any local pg on 5432
+    volumes:
+      - recall_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recall -d recall"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  recall_pgdata:

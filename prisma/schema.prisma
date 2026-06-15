@@ -1,0 +1,353 @@
+// Recall — data layer (single Postgres + pgvector).
+//
+// NOTE ON THE SHARED BACKBONE (PRD §7): in production, clients/projects/users/
+// roles are OWNED by the Futuready onboarding system and referenced by ID. That
+// codebase is not present here, so for the standalone MVP we model those tables
+// locally. They are grouped below under "SHARED BACKBONE" and are the single
+// source of truth; everything else is "added by this product".
+//
+// All DB columns are snake_case (@map) so raw SQL (pgvector ANN search, hybrid
+// full-text) reads naturally; the Prisma client API stays camelCase.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+// ───────────────────────── SHARED BACKBONE (owned by onboarding) ────────────
+
+enum Role {
+  super_admin
+  admin_cs_lead
+  bd
+  finance
+  cs
+  performance
+  design_video
+}
+
+model User {
+  id              Int                @id @default(autoincrement())
+  name            String
+  email           String             @unique
+  role            Role
+  assignedClients ClientAssignment[]
+  workspaces      UserWorkspace[]
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Client {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  projects      Project[]
+  recordings    Recording[]
+  conversations Conversation[]
+  assignments   ClientAssignment[]
+
+  @@map("clients")
+}
+
+model Project {
+  id        Int      @id @default(autoincrement())
+  clientId  Int      @map("client_id")
+  client    Client   @relation(fields: [clientId], references: [id])
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  recordings    Recording[]
+  conversations Conversation[]
+
+  @@index([clientId])
+  @@map("projects")
+}
+
+model ClientAssignment {
+  id       Int    @id @default(autoincrement())
+  userId   Int    @map("user_id")
+  clientId Int    @map("client_id")
+  user     User   @relation(fields: [userId], references: [id])
+  client   Client @relation(fields: [clientId], references: [id])
+
+  @@unique([userId, clientId])
+  @@map("client_assignments")
+}
+
+// ───────────────────────── ADDED BY THIS PRODUCT ────────────────────────────
+
+enum RecordingSource {
+  meet_bot
+  upload
+  phone
+  in_person
+}
+
+enum RecordingStatus {
+  captured
+  transcribing
+  transcribed
+  structuring
+  ready
+  capture_failed
+  transcription_failed
+  structure_failed
+}
+
+enum ConsentState {
+  not_set
+  informed
+  explicit
+  declined
+}
+
+model Recording {
+  id            Int             @id @default(autoincrement())
+  clientId      Int             @map("client_id")
+  projectId     Int             @map("project_id")
+  client        Client          @relation(fields: [clientId], references: [id])
+  project       Project         @relation(fields: [projectId], references: [id])
+  source        RecordingSource
+  storagePath   String          @map("storage_path")
+  title         String?
+  meetingDate   DateTime?       @map("meeting_date")
+  durationSec   Int?            @map("duration_sec")
+  checksum      String?
+  status        RecordingStatus @default(captured)
+  failureReason String?         @map("failure_reason")
+  correlationId String          @map("correlation_id")
+  createdById   Int             @map("created_by")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  consent      ConsentRecord?
+  transcript   Transcript?
+  conversation Conversation?
+
+  @@index([clientId, projectId, status])
+  @@map("recordings")
+}
+
+model Transcript {
+  id              Int              @id @default(autoincrement())
+  recordingId     Int              @unique @map("recording_id")
+  recording       Recording        @relation(fields: [recordingId], references: [id])
+  engineUsed      String           @map("engine_used")
+  languageSummary String?          @map("language_summary")
+  fullText        String           @map("full_text") @db.Text
+  wordCount       Int              @default(0) @map("word_count")
+  turns           TranscriptTurn[]
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  @@map("transcripts")
+}
+
+model TranscriptTurn {
+  id               Int        @id @default(autoincrement())
+  transcriptId     Int        @map("transcript_id")
+  transcript       Transcript @relation(fields: [transcriptId], references: [id])
+  speakerLabel     String     @map("speaker_label")
+  startTs          Float      @map("start_ts")
+  endTs            Float      @map("end_ts")
+  text             String     @db.Text
+  detectedLang     String?    @map("detected_lang")
+  // segment-level Financial/Legal tag — hides this turn from Design & Video
+  // even inside an otherwise-visible call (PRD REQ-3.2, REQ-12.2).
+  isFinancialLegal Boolean    @default(false) @map("is_financial_legal")
+
+  @@index([transcriptId])
+  @@map("transcript_turns")
+}
+
+enum TagConfidence {
+  high
+  low
+}
+
+model Conversation {
+  id            Int           @id @default(autoincrement())
+  clientId      Int           @map("client_id")
+  projectId     Int           @map("project_id")
+  recordingId   Int           @unique @map("recording_id")
+  client        Client        @relation(fields: [clientId], references: [id])
+  project       Project       @relation(fields: [projectId], references: [id])
+  recording     Recording     @relation(fields: [recordingId], references: [id])
+  title         String
+  topicTag      String?       @map("topic_tag")
+  summary       String        @db.Text
+  tagConfidence TagConfidence @default(high) @map("tag_confidence")
+  needsReview   Boolean       @default(false) @map("needs_review")
+  actionItems   ActionItem[]
+  decisions     Decision[]
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  @@index([clientId, projectId])
+  @@map("conversations")
+}
+
+enum ActionItemStatus {
+  open
+  done
+}
+
+model ActionItem {
+  id               Int              @id @default(autoincrement())
+  conversationId   Int              @map("conversation_id")
+  conversation     Conversation     @relation(fields: [conversationId], references: [id])
+  text             String           @db.Text
+  ownerLabel       String?          @map("owner_label")
+  dueText          String?          @map("due_text")
+  status           ActionItemStatus @default(open)
+  // hides financial action items from Design & Video (REQ-12.2 safety net)
+  isFinancialLegal Boolean          @default(false) @map("is_financial_legal")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  @@index([conversationId])
+  @@map("action_items")
+}
+
+model Decision {
+  id               Int          @id @default(autoincrement())
+  conversationId   Int          @map("conversation_id")
+  conversation     Conversation @relation(fields: [conversationId], references: [id])
+  text             String       @db.Text
+  isFinancialLegal Boolean      @default(false) @map("is_financial_legal")
+  createdAt        DateTime     @default(now()) @map("created_at")
+
+  @@index([conversationId])
+  @@map("decisions")
+}
+
+enum EntityType {
+  client
+  project
+}
+
+model EntitySummary {
+  id            Int        @id @default(autoincrement())
+  entityType    EntityType @map("entity_type")
+  entityId      Int        @map("entity_id")
+  summary       String     @db.Text
+  version       Int        @default(1)
+  prevVersionId Int?       @map("prev_version_id")
+  generatedAt   DateTime   @default(now()) @map("generated_at")
+
+  @@index([entityType, entityId])
+  @@map("entity_summaries")
+}
+
+model UserWorkspace {
+  id        Int             @id @default(autoincrement())
+  userId    Int             @map("user_id")
+  user      User            @relation(fields: [userId], references: [id])
+  name      String
+  items     WorkspaceItem[]
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("user_workspaces")
+}
+
+enum WorkspaceItemType {
+  chat
+  note
+  prompt
+  extraction
+}
+
+model WorkspaceItem {
+  id          Int               @id @default(autoincrement())
+  workspaceId Int               @map("workspace_id")
+  workspace   UserWorkspace     @relation(fields: [workspaceId], references: [id])
+  type        WorkspaceItemType
+  content     String            @db.Text
+  refsJson    Json?             @map("refs_json")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  @@index([workspaceId])
+  @@map("workspace_items")
+}
+
+model ConsentRecord {
+  id          Int          @id @default(autoincrement())
+  recordingId Int          @unique @map("recording_id")
+  recording   Recording    @relation(fields: [recordingId], references: [id])
+  state       ConsentState @default(not_set)
+  setById     Int?         @map("set_by")
+  note        String?
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  @@map("consent_records")
+}
+
+enum ReviewReason {
+  low_tag_confidence
+  multi_client
+  parse_failure
+  unsupported_language
+}
+
+model ReviewQueueItem {
+  id          Int          @id @default(autoincrement())
+  recordingId Int          @map("recording_id")
+  reason      ReviewReason
+  detail      String?
+  resolved    Boolean      @default(false)
+  resolverId  Int?         @map("resolver_id")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  resolvedAt  DateTime?    @map("resolved_at")
+
+  @@index([resolved])
+  @@map("review_queue")
+}
+
+model EngineConfig {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       String
+  updatedById Int?     @map("updated_by")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("engine_config")
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  actorId     Int?     @map("actor_id")
+  action      String
+  subjectType String   @map("subject_type")
+  subjectId   String?  @map("subject_id")
+  ip          String?
+  meta        Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([subjectType, subjectId])
+  @@index([actorId])
+  @@map("audit_logs")
+}
+
+model Embedding {
+  id               Int                          @id @default(autoincrement())
+  conversationId   Int                          @map("conversation_id")
+  turnId           Int?                         @map("turn_id")
+  passageText      String                       @map("passage_text") @db.Text
+  embedding        Unsupported("vector(1536)")?
+  modelUsed        String                       @map("model_used")
+  isFinancialLegal Boolean                      @default(false) @map("is_financial_legal")
+  createdAt        DateTime                     @default(now()) @map("created_at")
+
+  @@index([conversationId])
+  @@map("embeddings")
+}

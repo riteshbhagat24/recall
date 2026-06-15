@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Recall — Meeting Intelligence</title>
+<style>
+  :root{
+    --ink:#042C53; --blue:#185FA5; --blue-d:#0C447C; --blue-l:#E6F1FB;
+    --line:#dfe5ec; --paper:#fff; --bg:#f4f7fb; --muted:#5b6b7d;
+    --ok:#0F6E56; --ok-l:#E1F5EE; --warn:#854F0B; --warn-l:#FAEEDA;
+    --err:#993C1D; --err-l:#FAECE7; --purple:#534AB7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',Arial,sans-serif;color:#16222e;background:var(--bg);font-size:14px}
+  header{background:var(--paper);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:10}
+  .brand{font-weight:700;color:var(--ink);font-size:18px;letter-spacing:.2px}
+  .brand small{color:var(--blue);font-weight:600}
+  header .spacer{flex:1}
+  .role-box{display:flex;align-items:center;gap:8px}
+  .role-box label{color:var(--muted);font-size:12px}
+  select,input,button{font:inherit}
+  select,input[type=text],input[type=file]{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  button{padding:8px 14px;border:0;border-radius:8px;background:var(--blue);color:#fff;font-weight:600;cursor:pointer}
+  button.secondary{background:#fff;color:var(--blue);border:1px solid var(--blue)}
+  button:hover{background:var(--blue-d)} button.secondary:hover{background:var(--blue-l)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px}
+  .wrap{max-width:1180px;margin:18px auto;padding:0 20px;display:grid;grid-template-columns:340px 1fr;gap:18px}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:18px}
+  .card h2{margin:0 0 12px;font-size:14px;color:var(--ink);text-transform:uppercase;letter-spacing:.5px}
+  .field{margin-bottom:10px;display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:12px;color:var(--muted)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.3px}
+  .b-ready{background:var(--ok-l);color:var(--ok)} .b-proc{background:var(--blue-l);color:var(--blue)}
+  .b-fail{background:var(--err-l);color:var(--err)} .b-cap{background:#eef1f4;color:var(--muted)}
+  .rec{padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer}
+  .rec:hover{background:#fafcff} .rec .t{font-weight:600}
+  .rec .m{color:var(--muted);font-size:12px}
+  .conv-item{padding:10px;border:1px solid var(--line);border-radius:9px;margin-bottom:8px;cursor:pointer}
+  .conv-item:hover{border-color:var(--blue);background:#fafcff}
+  .turn{padding:8px 10px;border-radius:8px;margin-bottom:6px;background:#f7f9fc;border-left:3px solid var(--line)}
+  .turn .sp{font-weight:700;color:var(--blue-d);font-size:12px}
+  .turn .ts{color:var(--muted);font-size:11px;float:right}
+  .pill{display:inline-block;background:#f0eefe;color:var(--purple);font-size:11px;padding:2px 8px;border-radius:20px;margin:2px 4px 2px 0}
+  .list li{margin-bottom:5px}
+  .muted{color:var(--muted)} .small{font-size:12px}
+  .hint{background:var(--warn-l);border-left:4px solid var(--warn);border-radius:0 8px 8px 0;padding:9px 12px;font-size:12.5px;margin-bottom:14px;color:#5b3c08}
+  .res{padding:8px 10px;border-bottom:1px solid var(--line)}
+  .res .snip{margin-top:3px}
+  pre.md{white-space:pre-wrap;background:#0f1b29;color:#dbe7f3;padding:14px;border-radius:10px;font-size:12.5px;max-height:420px;overflow:auto}
+  .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .tabs button{background:#fff;color:var(--ink);border:1px solid var(--line);font-weight:600}
+  .tabs button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .empty{color:var(--muted);padding:14px;text-align:center}
+  a.link{color:var(--blue);cursor:pointer;text-decoration:underline}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">Recall <small>· Meeting Intelligence</small></div>
+  <div class="spacer"></div>
+  <span id="health" class="small muted"><span class="dot" style="background:#bbb"></span>checking…</span>
+  <div class="role-box">
+    <label>Acting as</label>
+    <select id="role"></select>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- LEFT -->
+  <div>
+    <div class="card">
+      <h2>Capture · Upload</h2>
+      <div class="field"><label>Client</label><select id="up-client"></select></div>
+      <div class="field"><label>Project</label><select id="up-project"></select></div>
+      <div class="field"><label>Consent</label>
+        <select id="up-consent">
+          <option value="explicit">explicit</option>
+          <option value="informed">informed</option>
+          <option value="not_set">not_set (won't process)</option>
+        </select>
+      </div>
+      <div class="field"><label>Audio/video file</label><input type="file" id="up-file" /></div>
+      <div class="row"><button id="up-btn">Upload &amp; process</button>
+        <span id="up-msg" class="small muted"></span></div>
+      <p class="small muted" style="margin:8px 0 0">No real audio needed — the mock engine
+        synthesizes a Hinglish transcript so the whole pipeline runs.</p>
+    </div>
+
+    <div class="card">
+      <h2>Pipeline · Recordings</h2>
+      <div id="recordings"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div>
+    <div class="hint" id="role-hint"></div>
+    <div class="tabs">
+      <button data-tab="kb" class="active">Knowledge base</button>
+      <button data-tab="search">Search</button>
+      <button data-tab="admin" id="tab-admin" style="display:none">Admin</button>
+    </div>
+
+    <!-- KB tab -->
+    <div id="tab-pane-kb">
+      <div class="card" id="conv-list-card">
+        <h2>Conversations</h2>
+        <div id="conversations"><div class="empty">No conversations yet.</div></div>
+      </div>
+      <div class="card" id="conv-detail" style="display:none"></div>
+    </div>
+
+    <!-- Search tab -->
+    <div id="tab-pane-search" style="display:none">
+      <div class="card">
+        <h2>Search the knowledge base</h2>
+        <div class="row">
+          <input type="text" id="q" placeholder="e.g. GST invoice, budget reallocate…" style="flex:1" />
+          <button id="search-btn">Search</button>
+        </div>
+        <p class="small muted" style="margin:8px 0 0">Hybrid keyword + semantic, permission-filtered.
+          Try the same query as Super Admin vs Design &amp; Video.</p>
+        <div id="search-results" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <!-- Admin tab -->
+    <div id="tab-pane-admin" style="display:none">
+      <div class="card">
+        <h2>Transcription engine</h2>
+        <div class="row">
+          <select id="engine-sel"></select>
+          <button id="engine-save" class="secondary">Set engine</button>
+          <span id="engine-msg" class="small muted"></span>
+        </div>
+        <p class="small muted" style="margin:8px 0 0">Swappable adapter — changing this changes
+          nothing downstream of <code>transcribe()</code>.</p>
+      </div>
+      <div class="card">
+        <h2>Review queue</h2>
+        <div id="review"><div class="empty">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = ''; // same origin
+let USER = '1';
+let USERS = [], CLIENTS = [];
+const $ = (id) => document.getElementById(id);
+
+function authHeaders(extra){ return Object.assign({ 'x-user-id': USER }, extra||{}); }
+async function api(path, opts){
+  const r = await fetch(API+path, Object.assign({ headers: authHeaders((opts&&opts.headers)||{}) }, opts||{}));
+  let body = null; try { body = await r.json(); } catch {}
+  return { status: r.status, ok: r.ok, body };
+}
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function badge(status){
+  const map={ready:'b-ready',captured:'b-cap',transcribing:'b-proc',transcribed:'b-proc',structuring:'b-proc'};
+  const cls = status.endsWith('_failed')?'b-fail':(map[status]||'b-cap');
+  return `<span class="badge ${cls}">${status.replace(/_/g,' ')}</span>`;
+}
+const ADMIN_ROLES=['super_admin','admin_cs_lead','bd'];
+function currentRole(){ const u=USERS.find(u=>String(u.id)===String(USER)); return u?u.role:''; }
+
+// ---- bootstrap ----
+async function boot(){
+  pollHealth(); setInterval(pollHealth, 5000);
+  const u = await (await fetch('/dev/users')).json();
+  USERS = u.users;
+  $('role').innerHTML = USERS.map(u=>`<option value="${u.id}">${esc(u.name)} — ${u.role}</option>`).join('');
+  $('role').value = USER;
+  await refreshAll();
+}
+async function pollHealth(){
+  try{ const h = await (await fetch('/health')).json();
+    const ok = h.ok; $('health').innerHTML =
+      `<span class="dot" style="background:${ok?'#0F6E56':'#993C1D'}"></span>`+
+      `db ${h.checks.db==='ok'?'ok':'down'} · worker ${h.checks.worker} · queue ${h.checks.queue_depth} · engine ${h.checks.transcription_engine}`;
+  }catch{ $('health').innerHTML='<span class="dot" style="background:#993C1D"></span>API down'; }
+}
+async function refreshAll(){
+  updateRoleHint();
+  const isAdmin = ADMIN_ROLES.includes(currentRole());
+  $('tab-admin').style.display = isAdmin?'':'none';
+  await loadClients(); await loadRecordings(); await loadConversations();
+  if(isAdmin) loadAdmin();
+}
+function updateRoleHint(){
+  const role = currentRole();
+  let msg = `You are acting as <b>${esc(role)}</b>. The server filters every response to this role.`;
+  if(role==='design_video') msg += ' <b>Financial/Legal content is stripped</b> from transcripts, decisions, search, and exports.';
+  else if(role==='performance') msg += ' You only see <b>assigned clients</b> (Acme).';
+  else msg += ' This role sees financial content.';
+  $('role-hint').innerHTML = msg;
+}
+
+// ---- clients / upload selects ----
+async function loadClients(){
+  const r = await api('/clients'); CLIENTS = (r.body&&r.body.clients)||[];
+  $('up-client').innerHTML = CLIENTS.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('') || '<option>none visible</option>';
+  syncProjects();
+}
+function syncProjects(){
+  const c = CLIENTS.find(c=>String(c.id)===$('up-client').value);
+  $('up-project').innerHTML = c ? c.projects.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('') : '';
+}
+$('up-client').onchange = syncProjects;
+
+// ---- upload ----
+$('up-btn').onclick = async () => {
+  const f = $('up-file').files[0];
+  const fd = new FormData();
+  fd.append('client_id', $('up-client').value);
+  fd.append('project_id', $('up-project').value);
+  fd.append('consent_state', $('up-consent').value);
+  fd.append('title', 'Uploaded via dashboard');
+  // synthesize a file if none chosen, so the demo works with one click
+  const blob = f || new Blob(['demo audio sample-01'], {type:'audio/mpeg'});
+  fd.append('file', blob, (f&&f.name) || 'sample-01.mp3');
+  $('up-btn').disabled = true; $('up-msg').textContent='uploading…';
+  const r = await fetch('/recordings/upload', { method:'POST', headers:{'x-user-id':USER}, body:fd });
+  const b = await r.json();
+  $('up-btn').disabled = false;
+  $('up-msg').textContent = b.ok ? (b.queued?`queued #${b.recording_id}`:`#${b.recording_id} captured (consent pending)`) : (b.message||'failed');
+  loadRecordings(); startPolling();
+};
+
+// ---- recordings + live polling ----
+let pollTimer=null;
+async function loadRecordings(){
+  const r = await api('/recordings'); const recs=(r.body&&r.body.recordings)||[];
+  $('recordings').innerHTML = recs.length ? recs.map(x=>`
+    <div class="rec" ${x.conversation_id?`onclick="openConversation(${x.conversation_id})"`:''}>
+      <div class="row" style="justify-content:space-between">
+        <span class="t">#${x.id} ${esc(x.title||x.project)}</span>${badge(x.status)}
+      </div>
+      <div class="m">${esc(x.client)} · ${esc(x.project)} · consent ${esc(x.consent)}
+        ${x.failure_reason?`· <span style="color:#993C1D">${esc(x.failure_reason)}</span>`:''}
+        ${x.conversation_id?'· <span class="link">view →</span>':''}</div>
+    </div>`).join('') : '<div class="empty">No recordings yet — upload one.</div>';
+  return recs;
+}
+function startPolling(){
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async ()=>{
+    const recs = await loadRecordings();
+    const busy = recs.some(r=>['captured','transcribing','transcribed','structuring'].includes(r.status));
+    if(busy) { loadConversations(); } else { clearInterval(pollTimer); pollTimer=null; loadConversations(); }
+  }, 1500);
+}
+
+// ---- conversations ----
+async function loadConversations(){
+  const r = await api('/conversations'); const cs=(r.body&&r.body.conversations)||[];
+  $('conversations').innerHTML = cs.length ? cs.map(c=>`
+    <div class="conv-item" onclick="openConversation(${c.id})">
+      <div class="row" style="justify-content:space-between">
+        <b>${esc(c.title)}</b>${c.needs_review?'<span class="badge b-fail">needs review</span>':''}
+      </div>
+      <div class="small muted">${esc(c.client)} · ${esc(c.project)} · ${esc(c.topic_tag||'')}</div>
+    </div>`).join('') : '<div class="empty">No conversations yet.</div>';
+}
+async function openConversation(id){
+  const r = await api('/conversations/'+id);
+  if(!r.ok){ $('conv-detail').style.display='block'; $('conv-detail').innerHTML=`<div class="empty">${esc((r.body&&r.body.message)||'forbidden')}</div>`; return; }
+  const c = r.body.conversation;
+  const proj = c.project_id;
+  $('conv-detail').style.display='block';
+  $('conv-detail').innerHTML = `
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">${esc(c.title)}</h2>
+      <button class="secondary" onclick="contextPack(${proj})">Export context pack</button>
+    </div>
+    <p>${c.topic_tag?`<span class="pill">${esc(c.topic_tag)}</span>`:''}
+       <span class="pill" style="background:#e6f1fb;color:#0c447c">confidence: ${esc(c.tag_confidence)}</span></p>
+    <h2 style="margin-top:8px">Summary</h2><p>${esc(c.summary)}</p>
+    <h2>Action items</h2>
+    ${c.action_items.length?`<ul class="list">${c.action_items.map(a=>`<li>${esc(a.text)} ${a.owner_label?`<span class="muted small">(${esc(a.owner_label)})</span>`:''} ${a.due_text?`<span class="muted small">— due ${esc(a.due_text)}</span>`:''}</li>`).join('')}</ul>`:'<p class="muted small">None.</p>'}
+    <h2>Decisions</h2>
+    ${c.decisions.length?`<ul class="list">${c.decisions.map(d=>`<li>${esc(d.text)}</li>`).join('')}</ul>`:'<p class="muted small">None visible to this role.</p>'}
+    <h2>Transcript <span class="muted small">(${c.transcript.length} turns visible)</span></h2>
+    ${c.transcript.map(t=>`<div class="turn"><span class="ts">${esc(t.start_ts)}s</span><span class="sp">${esc(t.speaker_label)}</span><div>${esc(t.text)}</div></div>`).join('')}
+    <div id="ctx-out"></div>`;
+  $('conv-detail').scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function contextPack(projectId){
+  const r = await api('/projects/'+projectId+'/context-pack');
+  $('ctx-out').innerHTML = r.ok ? `<h2>Context pack (markdown)</h2><pre class="md">${esc(r.body.content)}</pre>`
+                                : `<p class="muted">${esc((r.body&&r.body.message)||'forbidden')}</p>`;
+}
+
+// ---- search ----
+$('search-btn').onclick = doSearch;
+$('q').addEventListener('keydown', e=>{ if(e.key==='Enter') doSearch(); });
+async function doSearch(){
+  const q = $('q').value.trim(); if(!q) return;
+  const r = await api('/search?q='+encodeURIComponent(q));
+  const res = (r.body&&r.body.results)||[];
+  $('search-results').innerHTML = res.length ? res.map(x=>`
+    <div class="res"><div class="row" style="justify-content:space-between">
+      <span class="link" onclick="openConversation(${x.conversation_id})">conversation #${x.conversation_id}</span>
+      <span class="muted small">${esc(x.speaker_label||'')} · ${esc(x.timestamp||'')} · score ${x.score}</span></div>
+      <div class="snip">${esc(x.snippet)}</div></div>`).join('')
+    : '<div class="empty">No results for this role.</div>';
+}
+
+// ---- admin ----
+async function loadAdmin(){
+  const ec = await api('/admin/engine-config');
+  if(ec.ok){ $('engine-sel').innerHTML = ec.body.available.map(e=>`<option ${e===ec.body.transcription_engine?'selected':''}>${e}</option>`).join(''); }
+  const rq = await api('/admin/review-queue');
+  const items = (rq.body&&rq.body.items)||[];
+  $('review').innerHTML = items.length ? items.map(i=>`<div class="res"><b>#${i.recording_id}</b>
+    <span class="badge b-fail">${esc(i.reason.replace(/_/g,' '))}</span>
+    <div class="small muted">${esc(i.detail||'')}</div></div>`).join('') : '<div class="empty">Queue is clear.</div>';
+}
+$('engine-save').onclick = async () => {
+  const r = await api('/admin/engine-config',{ method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({engine:$('engine-sel').value}) });
+  $('engine-msg').textContent = r.ok?`engine = ${r.body.transcription_engine}`:'failed'; pollHealth();
+};
+
+// ---- tabs + role switch ----
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  ['kb','search','admin'].forEach(t=>$('tab-pane-'+t).style.display = (t===b.dataset.tab)?'':'none');
+});
+$('role').onchange = (e)=>{ USER = e.target.value; $('conv-detail').style.display='none'; refreshAll(); };
+
+boot();
+</script>
+</body>
+</html>
