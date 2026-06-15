@@ -12,6 +12,9 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
+  // "native" for local dev (Windows); the Debian/OpenSSL-3 target is the Linux
+  // engine the Docker image (node:22-slim = Debian 12) needs at runtime.
+  binaryTargets   = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
